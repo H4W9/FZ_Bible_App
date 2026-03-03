@@ -10,7 +10,7 @@
 
 const char kb_page0[KB_NROWS][KB_NCOLS] = {
     { 'q','w','e','r','t','y','u','i','o','p','1','2','3' },
-    { 'a','s','d','f','g','h','j','k','l','-','4','5','6' },
+    { 'a','s','d','f','g','h','j','k','l',':','4','5','6' },
     { 'z','x','c','v','b','n','m',',','.','_','7','8','9' },
 };
 
@@ -71,9 +71,31 @@ void draw_search_input(Canvas* canvas, App* app) {
     // Input field
     canvas_set_font_custom(canvas, FONT_SIZE_MEDIUM);
     canvas_draw_frame(canvas, 2, HDR_H + 1, SCREEN_W - 4, 12);
+
+    // Typed text + cursor on the left
     char disp[MAX_SEARCH_LEN + 4];
     snprintf(disp, sizeof(disp), "%s_", app->search_buf);
     canvas_draw_str(canvas, 4, HDR_H + 10, disp);
+
+    // Suggestion: show current match right-aligned inside the input box,
+    // only when it differs from what's already typed (i.e. there's a completion)
+    if(app->suggest_count > 0) {
+        const char* sug = app->suggest[app->suggest_sel];
+        // Find the prefix (last word) so we can show only the completion tail
+        // But display the full word right-aligned with a leading separator
+        char sug_disp[KEYWORD_WORD_LEN + 4];
+        // Show index indicator if more than one suggestion: "1/3 Word"
+        if(app->suggest_count > 1) {
+            snprintf(sug_disp, sizeof(sug_disp), "%d/%d %s",
+                     (int)(app->suggest_sel + 1), (int)app->suggest_count, sug);
+        } else {
+            snprintf(sug_disp, sizeof(sug_disp), "%s", sug);
+        }
+        canvas_set_font_custom(canvas, FONT_SIZE_SMALL);
+        canvas_draw_str_aligned(canvas, SCREEN_W - 5, HDR_H + 10,
+                                AlignRight, AlignBottom, sug_disp);
+        canvas_set_font_custom(canvas, FONT_SIZE_MEDIUM);
+    }
 
     // Keyboard grid
     // Special row is 8px tall, pinned to the very bottom (y=56..63).
@@ -182,56 +204,84 @@ void draw_search_results(Canvas* canvas, App* app) {
 
 void on_search(App* app, InputEvent* ev) {
 
-    // ── Hold OK: type the opposite-case version of the current letter ────────
-    // If caps is OFF, hold-OK types the UPPER-case letter (one-shot capital).
-    // If caps is ON,  hold-OK types the lower-case letter (one-shot lowercase).
-    // This mirrors the reference implementation exactly.
+    // ── Long Up: fill current suggestion ─────────────────────────────────
+    if(ev->type == InputTypeLong && ev->key == InputKeyUp) {
+        if(app->suggest_count > 0) {
+            suggestion_fill(app);
+            suggestions_update(app);
+            app->suggest_long_consumed = true;
+        }
+        return;
+    }
+    if(ev->type == InputTypeRelease && ev->key == InputKeyUp) {
+        app->suggest_long_consumed = false;
+        return;
+    }
+    if(ev->type == InputTypeRepeat && ev->key == InputKeyUp && app->suggest_long_consumed) return;
+
+    // ── Long Left/Right: cycle through suggestions ────────────────────────
+    if(ev->type == InputTypeLong &&
+       (ev->key == InputKeyLeft || ev->key == InputKeyRight)) {
+        if(app->suggest_count > 1) {
+            if(ev->key == InputKeyRight)
+                app->suggest_sel = (app->suggest_sel + 1) % app->suggest_count;
+            else
+                app->suggest_sel = (app->suggest_sel > 0) ?
+                                   app->suggest_sel - 1 : app->suggest_count - 1;
+            app->suggest_long_consumed = true;
+        }
+        return;
+    }
+    if(ev->type == InputTypeRelease &&
+       (ev->key == InputKeyLeft || ev->key == InputKeyRight)) {
+        app->suggest_long_consumed = false;
+        return;
+    }
+    if(ev->type == InputTypeRepeat &&
+       (ev->key == InputKeyLeft || ev->key == InputKeyRight) &&
+       app->suggest_long_consumed) return;
+
+    // ── Hold OK: one-shot opposite-case letter (original behaviour) ───────
     if(ev->type == InputTypeLong && ev->key == InputKeyOk) {
         if(app->kb_row < KB_NROWS && app->kb_page == 0) {
             char ch = kb_page0[app->kb_row][app->kb_col];
             if(ch >= 'a' && ch <= 'z') {
-                // When caps is off, normal press gives lower → hold gives upper
-                // When caps is on,  normal press gives upper → hold gives lower
                 if(!app->kb_caps) ch = (char)(ch - 32);
-                // (if kb_caps is true, ch is already lower-case, keep as-is)
                 if(app->search_len < MAX_SEARCH_LEN - 1) {
                     app->search_buf[app->search_len++] = ch;
                     app->search_buf[app->search_len]   = '\0';
+                    suggestions_update(app);
                 }
             }
         }
         app->kb_long_consumed = true;
         return;
     }
-    // Release clears the flag so the next short press works normally
     if(ev->type == InputTypeRelease && ev->key == InputKeyOk) {
         app->kb_long_consumed = false;
         return;
     }
-    // Suppress the repeat/short event that fires after a long-press
     if(ev->type == InputTypeRepeat && ev->key == InputKeyOk && app->kb_long_consumed) return;
 
     if(ev->type != InputTypeShort && ev->type != InputTypeRepeat) return;
 
     switch(ev->key) {
     // ── Navigation ─────────────────────────────────────────────────────────
-    // Up/Down wrap between the letter grid and the special-button row.
-    // Left/Right wrap within each row.
     case InputKeyUp:
-        if(app->kb_row == KB_NROWS)       // special row → top letter row, map col
+        if(app->kb_row == KB_NROWS)
             { app->kb_row = KB_NROWS - 1; app->kb_col = btn_to_col[app->kb_col]; }
         else if(app->kb_row > 0)
             app->kb_row--;
-        else                              // top letter row → wrap down to special row
+        else
             { app->kb_row = KB_NROWS;    app->kb_col = col_to_btn[app->kb_col]; }
         break;
 
     case InputKeyDown:
         if(app->kb_row < KB_NROWS - 1)
             app->kb_row++;
-        else if(app->kb_row == KB_NROWS - 1)  // last letter row → special row
+        else if(app->kb_row == KB_NROWS - 1)
             { app->kb_row = KB_NROWS;         app->kb_col = col_to_btn[app->kb_col]; }
-        else                                   // special row → wrap to top letter row
+        else
             { app->kb_row = 0;                app->kb_col = btn_to_col[app->kb_col]; }
         break;
 
@@ -252,7 +302,6 @@ void on_search(App* app, InputEvent* ev) {
     // ── OK: type or activate special button ────────────────────────────────
     case InputKeyOk:
         if(app->kb_row < KB_NROWS) {
-            // Type a character from the grid (may be multi-byte UTF-8 on page 2)
             const char* s = kb_key_label(app, app->kb_row, app->kb_col);
             if(s && s[0]) {
                 size_t slen = strlen(s);
@@ -260,27 +309,29 @@ void on_search(App* app, InputEvent* ev) {
                     memcpy(app->search_buf + app->search_len, s, slen);
                     app->search_len += (uint8_t)slen;
                     app->search_buf[app->search_len] = '\0';
+                    suggestions_update(app);
                 }
             }
         } else {
-            // Special button row
             switch(app->kb_col) {
             case 0: // DEL
                 search_buf_backspace(app);
+                suggestions_update(app);
                 break;
             case 1: // SPC
                 if(app->search_len < MAX_SEARCH_LEN - 1) {
                     app->search_buf[app->search_len++] = ' ';
                     app->search_buf[app->search_len]   = '\0';
+                    suggestions_update(app);
                 }
                 break;
-            case 2: // CAP (only active on page 0; "---" on page 1)
+            case 2: // CAP
                 if(app->kb_page == 0) app->kb_caps = !app->kb_caps;
                 break;
-            case 3: // SYM / UML / ABC -- cycle pages 0 -> 1 -> 2 -> 0
+            case 3: // SYM / UML / ABC
                 app->kb_page = (app->kb_page == 0) ? 1 : (app->kb_page == 1) ? 2 : 0;
                 break;
-            case 4: // GO! -- run search
+            case 4: // GO!
                 if(app->search_len > 0) {
                     app->view = ViewLoading;
                     view_port_update(app->view_port);
@@ -293,13 +344,13 @@ void on_search(App* app, InputEvent* ev) {
         break;
 
     // ── Back: backspace if buffer non-empty, else exit to menu ────────────
-    // Matches reference behaviour: Back acts as DEL while there is text,
-    // and only navigates away once the buffer is fully cleared.
     case InputKeyBack:
-        if(app->search_len > 0)
+        if(app->search_len > 0) {
             search_buf_backspace(app);
-        else
+            suggestions_update(app);
+        } else {
             app->view = ViewMenu;
+        }
         break;
 
     default: break;

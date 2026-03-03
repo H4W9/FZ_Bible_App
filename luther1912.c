@@ -320,6 +320,183 @@ static void canon_book_label(uint8_t canon_idx, char* buf, size_t len) {
 
 
 
+// ============================================================
+// Keywords  (suggestions in search input)
+// ============================================================
+
+// Built-in fallback list – covers common Luther Bible vocabulary.
+// User can override by placing keywords.txt in DATA_DIR on the SD card.
+static const char* const BUILTIN_KEYWORDS[] = {
+    // People & patriarchs
+    "Abraham","Adam","Apostel","Daniel","David","Elia","Elija","Esau",
+    "Eva","Hagar","Hiob","Isaak","Jakob","Jesus","Johannes","Josef",
+    "Josua","Judas","Kain","Lukas","Maria","Markus","Matthaus","Mose",
+    "Nimrod","Noah","Paulus","Petrus","Salomo","Samuel","Sara","Simeon",
+    // Titles & roles
+    "Christus","Herr","Heiland","Koenig","Priester","Prophet","Richter",
+    "Apostel","Juenger","Pharisaeer","Schriftgelehrter","Hohepriester",
+    "Knecht","Hirte","Levit","Nazarener",
+    // God & faith
+    "Glaube","Gnade","Gott","Gottesdienst","Heilig","Hoffnung","Liebe",
+    "Barmherzigkeit","Erbarmen","Erloesung","Ewigkeit","Freiheit",
+    "Gerechtigkeit","Herrlichkeit","Heiligkeit","Lobpreis","Treue",
+    "Vergebung","Vorsehung","Wahrheit","Weisheit","Wunder","Zeichen",
+    // Worship & practice
+    "Altar","Amen","Gebet","Gebot","Gesetz","Gottesdienst","Lobpreis",
+    "Opfer","Sabbat","Segen","Taufe","Tempel","Zehnten","Beschneidung",
+    "Beichte","Busse","Dankopfer","Fastentag","Gelübde","Opferlamm",
+    // Salvation & sin
+    "Errettung","Sünde","Suende","Schuld","Reue","Umkehr","Busse",
+    "Gericht","Heil","Verdammnis","Versöhnung","Versoenung","Strafe",
+    // Creation & nature
+    "Erde","Feuer","Himmel","Licht","Meer","Nacht","Tag","Wasser",
+    "Wind","Berg","Fluss","Garten","Land","Stern","Sonne","Mond",
+    "Wolke","Regen","Wüste","Wueste","Tal","Welle","Feld","Baum",
+    // Objects & places
+    "Arche","Brot","Grab","Kreuz","Lamm","Schwert","Stein","Stab",
+    "Bundeslade","Jerusalem","Israel","Zion","Bethlehem","Galiläa",
+    "Galilaea","Jordan","Kapernaum","Nazareth","Aegypten","Babylon",
+    "Sinai","Golgatha",
+    // Body & life
+    "Auge","Blut","Bruder","Hand","Herz","Leben","Leib","Mutter",
+    "Name","Seele","Sohn","Tod","Vater","Tochter","Schwester","Geist",
+    "Atem","Fleisch","Kraft","Stimme",
+    // Key concepts
+    "Buch","Engel","Evangelium","Friede","Gemeinde","Gleichnis","Lob",
+    "Psalm","Reich","Trost","Volk","Wort","Zeugnis","Auferstehung",
+    "Bescheidenheit","Demut","Einheit","Gehorsam","Geduld","Güte","Güete",
+    "Harfe","Hosanna","Hunger","Kraft","Langmut","Nächstenliebe",
+    "Naechstenliebe","Retter","Teufel","Traum","Vision",
+    // Common German search words
+    "nicht","und","aber","auch","denn","wie","wenn","dass","alle",
+    "alles","viele","gross","gut","neu","alt","heilig","ewig","wahr",
+    "gross","klein","stark","schwach","arm","reich","gerecht","bose",
+    "böse","fromm","weise","geduldig","treu","bereit","lebendig",
+    "Anfang","Ende","Zeit","Jahr","Morgen","Abend",
+    "Weg","Welt","Feind","Kampf","Ruf","Ehe","Frieden","Leid","Freude",
+};
+#define BUILTIN_KW_COUNT ((uint16_t)(sizeof(BUILTIN_KEYWORDS)/sizeof(BUILTIN_KEYWORDS[0])))
+
+// Static storage for keyword table -- kept out of App to avoid bloating the
+// heap allocation and to ensure it lives in BSS (zero-initialised).
+static char s_kw_words[MAX_KEYWORDS][KEYWORD_WORD_LEN];
+static uint16_t s_kw_count = 0;
+
+void keywords_load(App* app) {
+    s_kw_count         = 0;
+    app->kw_count      = 0;
+    app->suggest_count = 0;
+    app->suggest_sel   = 0;
+
+    File* f = storage_file_alloc(app->storage);
+    bool from_file = storage_file_open(f, KEYWORDS_PATH, FSAM_READ, FSOM_OPEN_EXISTING);
+    if(from_file) {
+        // Read line-by-line with a small stack buffer to avoid stack overflow.
+        char line[KEYWORD_WORD_LEN + 2];
+        uint8_t lpos = 0;
+        char ch = 0;
+        while(s_kw_count < MAX_KEYWORDS) {
+            uint16_t rd = storage_file_read(f, &ch, 1);
+            if(rd == 0) {
+                // EOF: flush any pending word
+                if(lpos > 0) {
+                    while(lpos > 0 && line[lpos-1] == ' ') lpos--;
+                    if(lpos > 0) {
+                        line[lpos] = '\0';
+                        memcpy(s_kw_words[s_kw_count], line, lpos + 1);
+                        s_kw_count++;
+                    }
+                }
+                break;
+            }
+            if(ch == '\n' || ch == '\r') {
+                // End of line: trim and store
+                while(lpos > 0 && line[lpos-1] == ' ') lpos--;
+                if(lpos > 0) {
+                    line[lpos] = '\0';
+                    memcpy(s_kw_words[s_kw_count], line, lpos + 1);
+                    s_kw_count++;
+                }
+                lpos = 0;
+            } else {
+                if(lpos < KEYWORD_WORD_LEN - 1)
+                    line[lpos++] = ch;
+                // else: word too long, keep reading until newline discards it
+            }
+        }
+        storage_file_close(f);
+        storage_file_free(f);
+    } else {
+        storage_file_free(f);
+        // Use built-in list
+        for(uint16_t i = 0; i < BUILTIN_KW_COUNT && i < MAX_KEYWORDS; i++) {
+            strncpy(s_kw_words[i], BUILTIN_KEYWORDS[i], KEYWORD_WORD_LEN - 1);
+            s_kw_words[i][KEYWORD_WORD_LEN - 1] = '\0';
+        }
+        s_kw_count = (BUILTIN_KW_COUNT < MAX_KEYWORDS) ?
+                     (uint16_t)BUILTIN_KW_COUNT : MAX_KEYWORDS;
+    }
+    app->kw_count = s_kw_count;
+}
+
+// Case-insensitive ASCII prefix match
+static bool kw_prefix_match(const char* word, const char* prefix, uint8_t plen) {
+    for(uint8_t i = 0; i < plen; i++) {
+        char a = word[i], b = prefix[i];
+        if(!a) return false;
+        if(a >= 'A' && a <= 'Z') a = (char)(a + 32);
+        if(b >= 'A' && b <= 'Z') b = (char)(b + 32);
+        if(a != b) return false;
+    }
+    return true;
+}
+
+// Rebuild suggestion list from current buffer (prefix = last word after space)
+void suggestions_update(App* app) {
+    app->suggest_count = 0;
+    if(app->search_len == 0) return;
+
+    const char* prefix = app->search_buf;
+    for(int i = (int)app->search_len - 1; i >= 0; i--) {
+        if(app->search_buf[i] == ' ') { prefix = app->search_buf + i + 1; break; }
+    }
+    uint8_t plen = (uint8_t)strlen(prefix);
+    if(plen == 0) return;
+
+    for(uint16_t i = 0; i < s_kw_count && app->suggest_count < SUGGEST_MAX; i++) {
+        if(kw_prefix_match(s_kw_words[i], prefix, plen)) {
+            strncpy(app->suggest[app->suggest_count],
+                    s_kw_words[i], KEYWORD_WORD_LEN - 1);
+            app->suggest[app->suggest_count][KEYWORD_WORD_LEN - 1] = '\0';
+            app->suggest_count++;
+        }
+    }
+    if(app->suggest_sel >= app->suggest_count)
+        app->suggest_sel = (app->suggest_count > 0) ? app->suggest_count - 1 : 0;
+}
+
+// Replace last word in buffer with the selected suggestion
+void suggestion_fill(App* app) {
+    if(app->suggest_count == 0) return;
+    const char* word = app->suggest[app->suggest_sel];
+
+    int last_space = -1;
+    for(int i = (int)app->search_len - 1; i >= 0; i--) {
+        if(app->search_buf[i] == ' ') { last_space = i; break; }
+    }
+    uint8_t prefix_end = (uint8_t)(last_space + 1);
+
+    size_t wlen = strlen(word);
+    if(prefix_end + wlen >= MAX_SEARCH_LEN) return;
+
+    memcpy(app->search_buf + prefix_end, word, wlen);
+    app->search_len = (uint8_t)(prefix_end + wlen);
+    app->search_buf[app->search_len] = '\0';
+
+    app->suggest_count = 0;
+    app->suggest_sel   = 0;
+}
+
 void rebuild_book_list(App* app) {
     uint8_t sec = app->section_idx;
     app->book_count = 0;
@@ -960,6 +1137,8 @@ static const char* const ABOUT_LINES[] = {
     "   Select book first",
     "   OK on Search row",
     "   Type + GO! to search",
+    "   Long-L/R = cycle hint",
+    "   Long-Up = fill hint",
     "   OK = jump to verse",
     "   Back = refine query",
     "- - - - About - - - - - -",
@@ -1227,6 +1406,9 @@ static void on_menu(App* app, InputEvent* ev) {
             app->hit_count  = 0;
             app->hit_sel    = 0;
             app->hit_scroll = 0;
+            app->suggest_count = 0;
+            app->suggest_sel   = 0;
+            app->suggest_long_consumed = false;
             app->view = ViewSearch;
             break;
         case RowBookmarks:
@@ -1573,6 +1755,9 @@ int32_t luther1912_app(void* p) {
 
     // Load bookmarks
     bookmarks_load(app);
+
+    // Load keyword suggestions
+    keywords_load(app);
 
     // Build book list for restored section
     rebuild_book_list(app);

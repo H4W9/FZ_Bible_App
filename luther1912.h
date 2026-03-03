@@ -44,6 +44,11 @@
 #define MAX_SEARCH_LEN   24
 #define MAX_SEARCH_HITS  30
 
+#define KEYWORDS_PATH   DATA_DIR "/keywords.txt"
+#define MAX_KEYWORDS    200   // max words loaded from file
+#define KEYWORD_WORD_LEN 32   // max chars per keyword
+#define SUGGEST_MAX       5   // candidates held at once
+
 // ============================================================
 // Enums
 // ============================================================
@@ -147,6 +152,13 @@ typedef struct App {
     bool    kb_long_consumed;  // true while a long-press OK is being held,
                                // suppresses the following repeat/short event
 
+    // Keyword suggestions
+    uint16_t kw_count;                                // how many loaded
+    char    suggest[SUGGEST_MAX][KEYWORD_WORD_LEN];   // current matches
+    uint8_t suggest_count;
+    uint8_t suggest_sel;    // which match is displayed / will be filled
+    bool    suggest_long_consumed; // suppress repeat after long-L/R on suggestion
+
     // Search results
     struct {
         uint8_t sec;
@@ -189,3 +201,6 @@ void open_reading(App* app);
 void rebuild_book_list(App* app);
 void refresh_chapter_count(App* app);
 void refresh_verse_count(App* app);
+void keywords_load(App* app);
+void suggestions_update(App* app);
+void suggestion_fill(App* app);
