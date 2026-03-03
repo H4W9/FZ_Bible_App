@@ -116,11 +116,11 @@ static const BookDef CANON_BOOKS[] = {
     { "1_Makkabaer",     SEC_AP },
     { "2_Makkabaer",     SEC_AP },
     { "3_Makkabaer",     SEC_AP },
-    { "Stucke_zu_Esther",SEC_AP },
-    { "Stucke_zu_Daniel",SEC_AP },
+    { "Zusatze_Esther",SEC_AP },
+    { "Zusatze_Daniel",SEC_AP },
     { "1_Esdras",        SEC_AP },
     { "2_Esdras",        SEC_AP },
-    { "Das_Gebet_Manasses", SEC_AP },
+    { "Gebet_Manasse", SEC_AP },
 };
 #define CANON_BOOK_COUNT  ((uint8_t)(sizeof(CANON_BOOKS)/sizeof(CANON_BOOKS[0])))
 
