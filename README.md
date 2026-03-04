@@ -8,11 +8,11 @@ A full-featured offline Bible reader for the Flipper Zero. Browse, search, and b
 
 <img width=19% height=19% alt="main_menu" src="https://github.com/user-attachments/assets/adba9650-59cb-4244-9824-15803f617e8a" />
 
-<img width=19% height=19% alt="settings" src="https://github.com/user-attachments/assets/f1e7dfb7-2389-4d36-b111-9c525f247bf2" />
+<img width=19% height=19% alt="settings" src="https://github.com/user-attachments/assets/68121d54-d3d6-4423-8988-f65f0f9b5adc" />
 
 <img width=19% height=19% alt="reading_screen" src="https://github.com/user-attachments/assets/67025c0a-360c-4788-a454-990ee0bd7cf3" />
 
-<img width=19% height=19% alt="search" src="https://github.com/user-attachments/assets/577dfa42-b276-4fef-a669-5b45f467a99c" />
+<img width=19% height=19% alt="search" src="https://github.com/user-attachments/assets/fda747cb-942b-4470-ad00-a11e974562c2" />
 
 <img width=19% height=19% alt="search_results" src="https://github.com/user-attachments/assets/601ac89e-8943-4937-94b9-987936ef7470" />
 
@@ -21,6 +21,10 @@ A full-featured offline Bible reader for the Flipper Zero. Browse, search, and b
 
 
 **Credits:** I used Custom Font files from [JBlanked's](https://github.com/jblanked) project here... [Hello-World-Flipper-Zero](https://github.com/jblanked/Hello-World-Flipper-Zero).
+
+Supported XML format: OSIS 2.1.1 (the same format used by the Free Bible Software Group / ZefToOsis encoder).
+OSIS XML Bible files available here [XML Bible Files](https://github.com/gratis-bible/bible)
+Use the [generate_sd_xml.py](https://github.com/H4W9/LutherBibel1912/blob/main/sd_directory_builder/xml/generate_sd_xml.py) to generate the SD files for the Flipper SD card
 
 This app was built with the assistance of [Claude](https://www.google.com/aclk?sa=L&pf=1&ai=DChsSEwj2ouHcyO6SAxVpFK0GHeImMJIYACICCAEQARoCcHY&co=1&ase=2&gclid=Cj0KCQiA7-rMBhCFARIsAKnLKtCsQdQJL2gmzqz5jsZBJ7hhI2l-HVuQ3-vNUiLQEz--k6bTNDZTz1EaArLgEALw_wcB&cid=CAASWuRop1HLx_wJXV_6YNoiswCR_CMK1oeLWmejtkjGwuQatm9-O6-DLRbSDIJ5DeArBQzVyEnGCyjfMfuNvLcrhULbSAVmO0jon8KWGZYhFK9_yxti0CDO2Z4tfA&cce=2&category=acrcp_v1_32&sig=AOD64_0rqbc12ct-DZqYYuzELr-Tdhr7gA&q&nis=4&adurl=https://chaton.ai/claude/?utm_source%3Dgoogle%26utm_medium%3Dcpc%26utm_campaign%3DGA%2520%7C%2520ChatOn%2520%7C%2520Web%2520%7C%2520US%2520%7C%2520Search%2520%7C%2520Main%2520%7C%2520CPA%2520%7C%252021.07.25%26utm_content%3D790508279447%26utm_term%3Dclaude%2520ai%26campaign_id%3D22809916767%26adset_id%3D186149762341%26ad_id%3D790508279447%26gad_source%3D1%26gad_campaignid%3D22809916767%26gbraid%3D0AAAAA9SXzF5Rcu5MIgUy86oFRsGg2F56b%26gclid%3DCj0KCQiA7-rMBhCFARIsAKnLKtCsQdQJL2gmzqz5jsZBJ7hhI2l-HVuQ3-vNUiLQEz--k6bTNDZTz1EaArLgEALw_wcB&ved=2ahUKEwjy_9rcyO6SAxUGOjQIHcy8ItMQ0Qx6BAgoEAE)
 
