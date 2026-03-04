@@ -6,7 +6,7 @@ A full-featured offline Bible reader for the Flipper Zero. Browse, search, and b
 
 ---
 
-<img width=19% height=19% alt="main_menu" src="https://github.com/user-attachments/assets/adba9650-59cb-4244-9824-15803f617e8a" />
+<img width=19% height=19% alt="main_menu" src="https://github.com/user-attachments/assets/a1d11690-b537-4715-9001-5c6f4f1955b3" />
 
 <img width=19% height=19% alt="settings" src="https://github.com/user-attachments/assets/68121d54-d3d6-4423-8988-f65f0f9b5adc" />
 
