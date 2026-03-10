@@ -20,7 +20,7 @@
 #define GROUPS_PATH     DATA_DIR "/bm_groups.txt"
 #define MAX_BOOKMARKS   250
 #define MAX_BM_GROUPS    20
-#define BM_GROUP_NAME_LEN 24
+#define BM_GROUP_NAME_LEN 48
 // Sentinel: bookmark with group == BM_GROUP_NONE belongs to no group ("Default")
 #define BM_GROUP_NONE  0xFF
 
@@ -229,6 +229,8 @@ typedef struct App {
     // Heading edit overlay state (ViewBmHeadingEdit)
     uint8_t bm_edit_group;    // which group is being edited
     uint8_t bm_edit_sel;      // 0 = Rename, 1 = Delete
+    uint8_t bm_scroll_tick;   // frame counter driving all heading marquees (bookmarks list,
+                               // picker, drill-down header, heading-edit overlay)
 
     // Bookmark item edit overlay state (ViewBmItemEdit)
     uint8_t bm_item_idx;      // index into app->bookmarks[] being edited

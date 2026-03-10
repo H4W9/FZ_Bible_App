@@ -444,6 +444,74 @@ void set_ui_font(Canvas* canvas, const char* str) {
 }
 
 // ============================================================
+// UTF-8 / marquee helpers
+// ============================================================
+
+// Count the number of UTF-8 glyphs (leading bytes) in s.
+static uint8_t utf8_char_count(const char* s) {
+    uint8_t n = 0;
+    while(*s) {
+        if(((uint8_t)*s & 0xC0) != 0x80) n++;
+        s++;
+    }
+    return n;
+}
+
+// Fill out[0..out_size) with a scrolling window of max_vis UTF-8 glyphs from
+// src.  tick is a free-running frame counter (uint8_t wraps are fine).
+// Behaviour:
+//   - If char_count <= max_vis  → copy the whole string (no scroll).
+//   - Otherwise: pause at the start, step one glyph at a time, pause at the
+//     end, then loop.  PAUSE_FRAMES and STEP_FRAMES control the speed.
+// Returns true when the string is actually being scrolled (wider than window).
+static bool str_marquee_sub(const char* src, uint8_t char_count,
+                             uint8_t max_vis, uint8_t tick,
+                             char* out, uint8_t out_size) {
+    if(char_count <= max_vis || max_vis == 0) {
+        uint8_t i = 0;
+        while(src[i] && i < out_size - 1) { out[i] = src[i]; i++; }
+        out[i] = '\0';
+        return false;
+    }
+
+    const uint8_t  scroll_range = (uint8_t)(char_count - max_vis);
+    const uint8_t  PAUSE_FRAMES = 20;   // ~0.6 s hold at each end
+    const uint8_t  STEP_FRAMES  = 6;    // frames per character step
+    const uint16_t cycle_len    = (uint16_t)(PAUSE_FRAMES +
+                                   (uint16_t)scroll_range * STEP_FRAMES +
+                                   PAUSE_FRAMES);
+
+    uint16_t phase = (uint16_t)(tick % cycle_len);
+    uint8_t  char_off;
+    if(phase < PAUSE_FRAMES) {
+        char_off = 0;
+    } else if(phase < (uint16_t)(PAUSE_FRAMES + (uint16_t)scroll_range * STEP_FRAMES)) {
+        char_off = (uint8_t)((phase - PAUSE_FRAMES) / STEP_FRAMES);
+    } else {
+        char_off = scroll_range;
+    }
+
+    // Advance src past char_off UTF-8 glyphs
+    uint8_t si = 0, skipped = 0;
+    while(src[si] && skipped < char_off) {
+        si++;
+        while(src[si] && ((uint8_t)src[si] & 0xC0) == 0x80) si++;
+        skipped++;
+    }
+    // Copy max_vis glyphs into out
+    uint8_t di = 0, dc = 0;
+    while(src[si] && dc < max_vis && di < (uint8_t)(out_size - 4)) {
+        out[di++] = src[si++];
+        while(src[si] && ((uint8_t)src[si] & 0xC0) == 0x80 &&
+              di < (uint8_t)(out_size - 1))
+            out[di++] = src[si++];
+        dc++;
+    }
+    out[di] = '\0';
+    return true;
+}
+
+// ============================================================
 // Book / section display labels
 // ============================================================
 
@@ -1715,7 +1783,17 @@ static void draw_bookmarks(Canvas* canvas, App* app) {
                 snprintf(label, sizeof(label), "%s (%d)",
                          app->bm_groups[rows[ri].idx], (int)cnt);
                 set_ui_font(canvas, label);
-                canvas_draw_str(canvas, 4, y + 8, label);
+                // Marquee on selected row; truncate (char_off=0) on others.
+                // Available px: screen width minus scrollbar, left pad (4), and
+                // space for the ">" indicator on the right (~12px).
+                const uint8_t cw_list = str_has_umlaut(label) ? 5 : 6;
+                const uint8_t mv_list = (uint8_t)((SCREEN_W - SB_W - 2 - 4 - 12) / cw_list);
+                uint8_t lc = utf8_char_count(label);
+                char lsub[BM_GROUP_NAME_LEN + 8];
+                str_marquee_sub(label, lc, mv_list,
+                                sel ? app->bm_scroll_tick : 0,
+                                lsub, sizeof(lsub));
+                canvas_draw_str(canvas, 4, y + 8, lsub);
                 canvas_set_font(canvas, FontSecondary);
                 canvas_draw_str_aligned(canvas, SCREEN_W - SB_W - 4, y + 8,
                                         AlignRight, AlignBottom, ">");
@@ -1740,11 +1818,25 @@ static void draw_bookmarks(Canvas* canvas, App* app) {
 
     } else {
         // ── Drill-down: bookmarks inside one heading ─────────────────────────
-        char hdr_buf[32];
+        // Draw header with scrolling marquee if name is too long for the bar.
         uint8_t grp = app->bm_open_group;
         uint8_t cnt = bm_count_in_group(app, grp);
-        snprintf(hdr_buf, sizeof(hdr_buf), "%s (%d)", app->bm_groups[grp], (int)cnt);
-        draw_hdr(canvas, hdr_buf);
+        char hdr_full[BM_GROUP_NAME_LEN + 8];
+        snprintf(hdr_full, sizeof(hdr_full), "%s (%d)", app->bm_groups[grp], (int)cnt);
+        canvas_set_color(canvas, ColorBlack);
+        canvas_draw_box(canvas, 0, 0, SCREEN_W, HDR_H);
+        canvas_set_color(canvas, ColorWhite);
+        if(str_has_umlaut(hdr_full))
+            canvas_set_font_custom(canvas, UMLAUT_FALLBACK_FONT_HDR);
+        else
+            canvas_set_font(canvas, FontPrimary);
+        // char_w=6 for both fonts (conservative); gives ~20 visible chars in 128px.
+        const uint8_t hdr_mv = (uint8_t)((SCREEN_W - 8) / 6);
+        uint8_t hdr_cc = utf8_char_count(hdr_full);
+        char hdr_sub[BM_GROUP_NAME_LEN + 8];
+        str_marquee_sub(hdr_full, hdr_cc, hdr_mv, app->bm_scroll_tick, hdr_sub, sizeof(hdr_sub));
+        canvas_draw_str_aligned(canvas, SCREEN_W / 2, 1, AlignCenter, AlignTop, hdr_sub);
+        canvas_set_color(canvas, ColorBlack);
 
         set_fg(canvas, app);
         canvas_set_font(canvas, FontSecondary);
@@ -1869,7 +1961,23 @@ void draw_bm_group_pick(Canvas* canvas, App* app) {
         } else {
             label = "+ Add New";
         }
-        canvas_draw_str(canvas, BOX_X + 4, y + 8, label);
+
+        if(ri > 0 && ri <= app->bm_group_count) {
+            // Group name row: umlaut fallback + marquee when selected
+            set_ui_font(canvas, lbuf);
+            // Available px: box inner width minus left pad (4) and scrollbar margin (5)
+            const uint8_t cw_pick = str_has_umlaut(lbuf) ? 5 : 6;
+            const uint8_t mv_pick = (uint8_t)((BOX_W - 4 - 5 - 4) / cw_pick);
+            uint8_t lc = utf8_char_count(lbuf);
+            char psub[BM_GROUP_NAME_LEN + 2];
+            str_marquee_sub(lbuf, lc, mv_pick,
+                            sel ? app->bm_scroll_tick : 0,
+                            psub, sizeof(psub));
+            canvas_draw_str(canvas, BOX_X + 4, y + 8, psub);
+            canvas_set_font(canvas, FontSecondary);
+        } else {
+            canvas_draw_str(canvas, BOX_X + 4, y + 8, label);
+        }
     }
     // Mini scrollbar inside box
     if(total > VIS) {
@@ -1890,10 +1998,12 @@ void on_bm_group_pick(App* app, InputEvent* ev) {
     case InputKeyUp:
         if(app->bm_pick_sel > 0) app->bm_pick_sel--;
         else app->bm_pick_sel = total - 1;
+        app->bm_scroll_tick = 0;
         break;
     case InputKeyDown:
         if(app->bm_pick_sel < total - 1) app->bm_pick_sel++;
         else app->bm_pick_sel = 0;
+        app->bm_scroll_tick = 0;
         break;
     case InputKeyOk: {
         uint8_t ri = app->bm_pick_sel;
@@ -2026,16 +2136,25 @@ void draw_bm_heading_edit(Canvas* canvas, App* app) {
     canvas_set_color(canvas, ColorBlack);
     canvas_draw_frame(canvas, BOX_X, BOX_Y, BOX_W, BOX_H);
 
-    // Header: group name (truncated)
+    // Header: group name — scrolls automatically when it doesn't fit
     canvas_draw_box(canvas, BOX_X, BOX_Y, BOX_W, HDR_HT);
     canvas_set_color(canvas, ColorWhite);
-    canvas_set_font(canvas, FontSecondary);
+
     char hdr[BM_GROUP_NAME_LEN + 2];
     snprintf(hdr, sizeof(hdr), "%s", app->bm_groups[app->bm_edit_group]);
-    // Truncate to box width
-    hdr[16] = '\0';
+    set_ui_font(canvas, hdr);  // falls back to custom font if name contains umlauts
+
+    // Estimate character width; decide how many glyphs fit in the box.
+    const uint8_t char_w  = str_has_umlaut(hdr) ? 5 : 6;
+    const uint8_t inner_w = (uint8_t)(BOX_W - 4);   // 2px padding each side
+    const uint8_t max_vis = (uint8_t)(inner_w / char_w);
+
+    uint8_t char_count = utf8_char_count(hdr);
+    char sub[BM_GROUP_NAME_LEN + 2];
+    str_marquee_sub(hdr, char_count, max_vis, app->bm_scroll_tick, sub, sizeof(sub));
+
     canvas_draw_str_aligned(canvas, SCREEN_W / 2, BOX_Y + 1,
-                            AlignCenter, AlignTop, hdr);
+                            AlignCenter, AlignTop, sub);
     canvas_set_color(canvas, ColorBlack);
 
     // Two option rows: Rename, Delete
@@ -2259,6 +2378,7 @@ static void draw_error(Canvas* canvas, App* app) {
 
 static void draw_cb(Canvas* canvas, void* ctx) {
     App* app = (App*)ctx;
+    app->bm_scroll_tick++;   // drives all heading marquees
     canvas_clear(canvas);
     switch(app->view) {
     case ViewMenu:     draw_menu(canvas, app);     break;
@@ -2811,6 +2931,7 @@ static void on_bookmarks(App* app, InputEvent* ev) {
                 if(rows[app->bm_sel].kind == 0) {
                     app->bm_edit_group    = rows[app->bm_sel].idx;
                     app->bm_edit_sel      = 0;
+                    app->bm_scroll_tick   = 0;
                     app->bm_long_consumed = true;
                     app->view = ViewBmHeadingEdit;
                 } else {
@@ -2836,19 +2957,22 @@ static void on_bookmarks(App* app, InputEvent* ev) {
         case InputKeyUp:
             if(app->bm_sel > 0) app->bm_sel--;
             else app->bm_sel = row_count - 1;
+            app->bm_scroll_tick = 0;
             break;
         case InputKeyDown:
             if(app->bm_sel < row_count - 1) app->bm_sel++;
             else app->bm_sel = 0;
+            app->bm_scroll_tick = 0;
             break;
         case InputKeyOk: {
             if(app->bm_sel >= row_count) break;
             if(rows[app->bm_sel].kind == 0) {
                 // Heading → drill into it
-                app->bm_open_group = rows[app->bm_sel].idx;
-                app->bm_in_group   = true;
-                app->bm_sel        = 0;
-                app->bm_scroll     = 0;
+                app->bm_open_group  = rows[app->bm_sel].idx;
+                app->bm_in_group    = true;
+                app->bm_sel         = 0;
+                app->bm_scroll      = 0;
+                app->bm_scroll_tick = 0;
             } else {
                 // Ungrouped bookmark → jump to reading
                 uint8_t bi = rows[app->bm_sel].idx;
