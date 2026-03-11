@@ -1,1 +1,0 @@
-Nogah, Nepheg, Japhia,
