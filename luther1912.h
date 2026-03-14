@@ -47,7 +47,7 @@
 #define KB_NROWS          3
 #define KB_NCOLS         13
 #define MAX_SEARCH_LEN   64
-#define MAX_SEARCH_HITS  30
+#define MAX_SEARCH_HITS  50
 
 #define KEYWORDS_PATH_DE DATA_DIR "/keywords_de.txt"
 #define KEYWORDS_PATH_EN DATA_DIR "/keywords_en.txt"
@@ -55,7 +55,7 @@
 #define KEYWORD_WORD_LEN 32   // max chars per keyword
 #define SUGGEST_MAX       5   // candidates held at once
 
-#define MAX_TRANSLATIONS   5
+#define MAX_TRANSLATIONS   10
 #define TRANSLATION_NAME_LEN 32
 
 // ============================================================
@@ -253,6 +253,10 @@ typedef struct App {
     // bm_naming=true tells keyboard.c GO! to confirm a group name instead of searching.
     bool    bm_naming;       // true while keyboard is being used for group name entry
     char    bm_new_name[BM_GROUP_NAME_LEN]; // saved when entering the view
+
+    // Search cancellation: set true inside do_search when a Back press is detected
+    // mid-search; checked in keyboard.c after do_search() returns.
+    bool    search_cancel;
 
     // Available sections for the current translation (subset of 0..3)
     uint8_t avail_sections[4];

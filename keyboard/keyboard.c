@@ -508,7 +508,14 @@ void on_search(App* app, InputEvent* ev) {
                     app->view = ViewLoading;
                     view_port_update(app->view_port);
                     do_search(app);
-                    app->view = ViewSearchResults;
+                    if(app->search_cancel) {
+                        // User pressed Back during search — return to keyboard
+                        app->search_cancel = false;
+                        app->kb_back_long_consumed = true;  // suppress the Back short/repeat
+                        app->view = ViewSearch;
+                    } else {
+                        app->view = ViewSearchResults;
+                    }
                 }
                 break;
             }

@@ -3166,6 +3166,13 @@ static void on_settings(App* app, InputEvent* ev) {
 
     // -- Font list is open --
     if(app->settings_font_open) {
+        // Clear the long-consumed flag on release so the held Repeat doesn't
+        // immediately close the list that was just opened by the long-press.
+        if(ev->type == InputTypeRelease && ev->key == InputKeyOk) {
+            app->settings_long_consumed = false;
+            return;
+        }
+        if(app->settings_long_consumed) return;
         if(ev->type != InputTypeShort && ev->type != InputTypeRepeat) return;
         switch(ev->key) {
         case InputKeyUp:
@@ -3191,6 +3198,13 @@ static void on_settings(App* app, InputEvent* ev) {
 
     // -- Translation list is open --
     if(app->settings_trans_open) {
+        // Same guard as font-open: release clears the flag so the held Repeat
+        // doesn't close the list that was just opened by the long-press.
+        if(ev->type == InputTypeRelease && ev->key == InputKeyOk) {
+            app->settings_long_consumed = false;
+            return;
+        }
+        if(app->settings_long_consumed) return;
         if(ev->type != InputTypeShort && ev->type != InputTypeRepeat) return;
         switch(ev->key) {
         case InputKeyUp:
