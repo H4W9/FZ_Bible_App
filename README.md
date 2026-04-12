@@ -1,7 +1,7 @@
-# Bible Verse Viewer — Flipper Zero App
+# FZ Bible App — Flipper Zero App
 
 
-Luther Bibel 1912 - Bible study app for Flipper Zero
+FZ Bibel App - Bible study app for Flipper Zero
 A full-featured offline Bible reader for the Flipper Zero. Browse, search, and bookmark verses from SD card files.
 
 ---
